@@ -4,6 +4,9 @@
 
 #include "Chip8.h"
 
+#include <stdexcept>
+
+constexpr int CHIP8_ROM_START_ADDR = 0X200;
 constexpr int CHIP8_FONT_START_ADDR = 0x50;
 
 static constexpr std::array<uint8_t, 80> FONT {
@@ -27,6 +30,8 @@ static constexpr std::array<uint8_t, 80> FONT {
 
 Chip8::Chip8() {
      /* Load font at address 0x50*/
+     reset();
+
      for (size_t i = 0; i < FONT.size(); i++) {
           ram_[CHIP8_FONT_START_ADDR + i] = FONT[i];
      }
@@ -34,7 +39,7 @@ Chip8::Chip8() {
 
 void Chip8::loadRom(const std::vector<char> &data) {
      for (size_t i = 0; i < data.size(); i++) {
-          ram_[0x200 + i] = data[i];
+          ram_[CHIP8_ROM_START_ADDR + i] = data[i];
      }
 }
 
@@ -49,35 +54,52 @@ auto Chip8::vram() -> std::array<uint8_t, CHIP8_VRAM_SIZE> & {
      return vram_;
 }
 
+void Chip8::reset() {
+     sp_  = 0;
+     index_ = 0;
+     keyState = 0;
+     soundTimer_ = 0;
+     delayTimer_ = 0;
+     pc_ = CHIP8_ROM_START_ADDR;
+
+     v_.fill(0);
+     vram_.fill(0);
+     stack_.fill(0);
+}
+
 void Chip8::updateTimers() {
      if (delayTimer_ > 0) {
           delayTimer_--;
      }
 
-     if (soundCounter_ > 0) {
-          soundCounter_--;
+     if (soundTimer_ > 0) {
+          soundTimer_--;
      }
 }
 
 bool Chip8::execute(const std::array<bool, 16> &keys, uint8_t rand) {
      bool halt = false;
+     uint16_t op = (ram_[pc_] << 8) + ram_[pc_ + 1];
+     pc_ += 2;
 
-     uint16_t op =  ram_[pc_++] << 8;
-     op |= ram_[pc_++];
-
-     switch (op & 0xf000) {
+     switch (op& 0xf000) {
           case 0x00: {
-               if (op == 0x00E0) {
-                    /* Clear the display */
-                    for (auto &byte : vram_) {
-                         byte = 0;
+               switch (op) {
+                    case 0x00E0: {
+                         /* Clear the display */
+                         vram_.fill(0);
+                         break;
                     }
-               } else if (op == 0x00EE) {
-                    /* Return from a subroutine. */
-                    pc_ = pop();
-               } else {
-                    /* Jump to a machine code routine at nnn.*/
-                    pc_ = op & 0x0fff;
+                    case 0x00EE: {
+                         /* Return from a subroutine. */
+                         pc_ = pop();
+                         break;
+                    }
+                    default: {
+                         /* Jump to a machine code routine at nnn.*/
+                         pc_ = op & 0x0fff;
+                         break;
+                    }
                }
 
                break;
@@ -129,7 +151,7 @@ bool Chip8::execute(const std::array<bool, 16> &keys, uint8_t rand) {
           case 0x6000: {
                /* Set Vx = kk. */
                uint8_t ix = (op & 0x0f00) >> 8;
-               uint8_t value = (op & 0x00ff);
+               uint8_t value = (op & 0xff);
 
                v_[ix] = value;
                break;
@@ -175,7 +197,7 @@ bool Chip8::execute(const std::array<bool, 16> &keys, uint8_t rand) {
                          uint16_t tmp = v_[ix] + v_[iy];
 
                          v_[ix] = tmp & 0xff;
-                         v_[0x0f] = (tmp & 0x0100) >> 8;
+                         v_[0x0f] = (tmp > 255) ? 1 : 0;
 
                          break;
                     }
@@ -200,6 +222,7 @@ bool Chip8::execute(const std::array<bool, 16> &keys, uint8_t rand) {
                          uint8_t flag = (v_[iy] >= v_[ix]) ? 1 : 0;
                          v_[ix] = v_[iy] - v_[ix];
                          v_[0x0f] = flag;
+
                          break;
                     }
                     case 0x0E: {
@@ -207,9 +230,12 @@ bool Chip8::execute(const std::array<bool, 16> &keys, uint8_t rand) {
                          uint8_t flag = (v_[ix] & 0x80) >> 7;
                          v_[ix] <<= 1;
                          v_[0x0f] = flag;
-                    }
-                    default:
+
                          break;
+                    }
+                    default: {
+                         throw std::runtime_error{"Unsupported instruction: " + std::to_string(op)};
+                    }
                }
 
                break;
@@ -262,11 +288,7 @@ bool Chip8::execute(const std::array<bool, 16> &keys, uint8_t rand) {
 
                          if (vy < 32 && vx < 64) {
                               uint8_t *old_pixel = &vram_[(vy * 64) + vx];
-
-                              if (*old_pixel != 0) {
-                                  collision = 1;
-                              }
-
+                              collision |= *old_pixel & new_pixel;
                               *old_pixel ^= new_pixel;
                          }
                     }
@@ -279,16 +301,24 @@ bool Chip8::execute(const std::array<bool, 16> &keys, uint8_t rand) {
           case 0xe000: {
                uint8_t ix = (op & 0x0f00) >> 8;
 
-               if ((op & 0xff) == 0x9e) {
-                    /* Skip next instruction if key with the value of Vx is pressed. */
-                    if (keys[v_[ix]]) {
-                         pc_ += 2;
+               switch (op & 0x00ff) {
+                    case 0x009e: {
+                         /* Skip next instruction if key with the value of Vx is pressed. */
+                         if (keys[v_[ix]]) {
+                              pc_ += 2;
+                         }
+                         break;
                     }
+                    case 0x00a1: {
+                         /* Skip next instruction if key with the value of Vx is not pressed. */
+                         if (!keys[v_[ix]]) {
+                              pc_ += 2;
+                         }
 
-               } else if ((op & 0xff) == 0xa1) {
-                    /* Skip next instruction if key with the value of Vx is not pressed. */
-                    if (!keys[v_[ix]]) {
-                         pc_ += 2;
+                         break;
+                    }
+                    default: {
+                         throw std::runtime_error{"Unsupported instruction: " + std::to_string(op)};
                     }
                }
 
@@ -329,16 +359,12 @@ bool Chip8::execute(const std::array<bool, 16> &keys, uint8_t rand) {
                     }
                     case 0x15: {
                          /* Set delay timer = Vx. */
-                         delayCounter_ = 0;
                          delayTimer_ = v_[ix];
-
                          break;
                     }
                     case 0x18: {
                          /* Set sound timer = Vx. */
-                         soundCounter_ = 0;
                          soundTimer_ = v_[ix];
-
                          break;
                     }
                     case 0x1e: {
@@ -353,13 +379,9 @@ bool Chip8::execute(const std::array<bool, 16> &keys, uint8_t rand) {
                     }
                     case 0x33: {
                          /* Store BCD representation of Vx in memory locations I, I+1, and I+2. */
-                         uint8_t hundreds = v_[ix] / 100;
-                         uint8_t tens = (v_[ix] - (hundreds * 100)) / 10;
-                         uint8_t ones = v_[ix] - (hundreds * 100) - (tens * 10);
-
-                         ram_[index_] = hundreds;
-                         ram_[index_ + 1] = tens;
-                         ram_[index_ + 2] = ones;
+                         ram_[index_] = v_[ix] / 100;;
+                         ram_[index_ + 1] = (v_[ix] % 100) / 10;;
+                         ram_[index_ + 2] = v_[ix] % 10;;
 
                          break;
                     }
@@ -379,12 +401,14 @@ bool Chip8::execute(const std::array<bool, 16> &keys, uint8_t rand) {
 
                          break;
                     }
-                    default:
-                         break;
+                    default: {
+                         throw std::runtime_error{"Unsupported instruction: " + std::to_string(op)};
+                    }
                }
 
                break;
           }
+
           default:
                break;
      }

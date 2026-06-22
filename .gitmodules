@@ -1,3 +1,6 @@
 [submodule "vendored/SDL"]
 	path = vendored/SDL
 	url = https://github.com/libsdl-org/SDL.git
+[submodule "chip8-test-suite"]
+	path = chip8-test-suite
+	url = https://github.com/Timendus/chip8-test-suite.git
