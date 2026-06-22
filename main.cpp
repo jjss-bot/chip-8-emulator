@@ -1,4 +1,3 @@
-
 #include "VM.h"
 #include <iostream>
 #include <stdexcept>
@@ -12,7 +11,7 @@ int main(int argc, char *argv[]) {
     try {
         VM vm{argv[1]};
         vm.run();
-    } catch (const std::runtime_error e) {
+    } catch (const std::runtime_error &e) {
         std::cerr << e.what() << std::endl;
         return EXIT_FAILURE;
     }

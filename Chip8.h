@@ -16,6 +16,7 @@ constexpr int CHIP8_VRAM_SIZE =  CHIP8_VIDEO_WIDTH * CHIP8_VIDEO_HEIGHT;
 class Chip8 {
 public:
     Chip8();
+    void reset();
     void updateTimers();
     void loadRom(const std::vector<char> &data);
     bool execute(const std::array<bool, 16> &keys, uint8_t rand);
@@ -23,14 +24,11 @@ public:
 
 private:
     uint16_t sp_{};
+    uint16_t pc_{};
     uint16_t index_{};
-    uint16_t pc_{0x200};
 
     uint8_t delayTimer_{};
-    uint8_t delayCounter_{};
-
     uint8_t soundTimer_{};
-    uint8_t soundCounter_{};
 
     char keyState{};
     std::array<uint8_t, 16> v_{};

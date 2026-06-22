@@ -52,13 +52,18 @@ void VM::run() {
     std::uniform_int_distribution<> distribution(0, 255);
 
     while (!quit_) {
-        bool halt = false;
+        bool halt{};
+
+        if (reset_) {
+            chip8_.reset();
+            reset_ = false;
+        }
+
         chip8_.updateTimers();
 
         for (int i = 0; i < 10 && !quit_ && !halt; i++) {
             handleInput();
             halt = chip8_.execute(keys_, distribution(gen));
-            keyboardLocked_ = false;
         }
 
         updateGraphics();
@@ -80,6 +85,9 @@ void VM::handleInput() {
             const bool val = event.type == SDL_EVENT_KEY_DOWN;
 
             switch (event.key.key) {
+                case SDLK_SPACE:
+                    reset_ = true;
+                    break;
                 case SDLK_ESCAPE:
                     quit_ = true;
                     break;
@@ -144,7 +152,7 @@ void VM::updateGraphics() {
     for (int i = 0; i < CHIP8_VIDEO_HEIGHT; i++) {
         for (int j = 0; j < CHIP8_VIDEO_WIDTH; j++) {
             if (vram[i * CHIP8_VIDEO_WIDTH + j]) {
-                pixels_[i * CHIP8_VIDEO_WIDTH + j] =  0xcd1900ff;
+                pixels_[i * CHIP8_VIDEO_WIDTH + j] =  0xf3c004ff;
             } else {
                 pixels_[i * CHIP8_VIDEO_WIDTH + j] =  0;
             }

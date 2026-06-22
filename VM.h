@@ -20,8 +20,8 @@ public:
 
 private:
     bool quit_{};
+    bool reset_{};
     Chip8 chip8_{};
-    bool keyboardLocked_{};
     std::array<bool, 16> keys_{};
     std::array<uint32_t, CHIP8_VRAM_SIZE> pixels_{};
 
