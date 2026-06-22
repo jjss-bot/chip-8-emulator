@@ -46,6 +46,7 @@ void Chip8::loadRom(const std::vector<char> &data) {
 uint16_t Chip8::pop() {
      return stack_[--sp_ % 16];
 }
+
 void Chip8::push(const uint16_t addr) {
      stack_[sp_++ % 16] = addr;
 }
