@@ -1,6 +1,8 @@
 # Chip-8-emulator
 A Chip-8 emulator in c++
 
+![](https://github.com/jjss-bot/chip-8-emulator/brick.gif)
+
 ## Controls
 Chip-8&emsp;&emsp;&emsp;&emsp;Keyboard  
 +-+-+-+-+-+&emsp;&emsp;+-+-+-+-+-+  
